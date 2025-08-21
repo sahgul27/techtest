@@ -87,11 +87,18 @@ jobs:
           docker push $DOCKERHUB_IMAGE
           docker push $ECR_IMAGE
 
-      # 9. Optional: push latest tag
+      # 9. Push latest tags safely
       - name: Tag as latest
         run: |
-          docker tag $DOCKERHUB_IMAGE $IMAGE_NAME:latest
-          docker push $IMAGE_NAME:latest
+          echo "DockerHub image: $DOCKERHUB_IMAGE"
+          echo "ECR image: $ECR_IMAGE"
+          echo "Image name: $IMAGE_NAME"
+          echo "ECR registry: ${{ steps.login-ecr.outputs.registry }}"
 
-          docker tag $ECR_IMAGE "${{ steps.login-ecr.outputs.registry }}/$IMAGE_NAME:latest"
+          # DockerHub latest tag
+          docker tag "$DOCKERHUB_IMAGE" "$IMAGE_NAME:latest"
+          docker push "$IMAGE_NAME:latest"
+
+          # ECR latest tag
+          docker tag "$ECR_IMAGE" "${{ steps.login-ecr.outputs.registry }}/$IMAGE_NAME:latest"
           docker push "${{ steps.login-ecr.outputs.registry }}/$IMAGE_NAME:latest"
