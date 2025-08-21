@@ -81,24 +81,33 @@ jobs:
           aws ecr create-repository --repository-name "$IMAGE_NAME"
 
           # Build image once with multiple tags
-          docker build -t $DOCKERHUB_IMAGE -t $ECR_IMAGE .
+          docker build -t "$DOCKERHUB_IMAGE" -t "$ECR_IMAGE" .
 
           # Push images
-          docker push $DOCKERHUB_IMAGE
-          docker push $ECR_IMAGE
+          docker push "$DOCKERHUB_IMAGE"
+          docker push "$ECR_IMAGE"
 
       # 9. Push latest tags safely
       - name: Tag as latest
+        env:
+          IMAGE_NAME: ${{ secrets.IMAGE_NAME }}
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
         run: |
+          TAG=${GITHUB_SHA::7}
+
+          # Recompute image names
+          DOCKERHUB_IMAGE="$IMAGE_NAME:$TAG"
+          ECR_IMAGE="$ECR_REGISTRY/$IMAGE_NAME:$TAG"
+
           echo "DockerHub image: $DOCKERHUB_IMAGE"
           echo "ECR image: $ECR_IMAGE"
           echo "Image name: $IMAGE_NAME"
-          echo "ECR registry: ${{ steps.login-ecr.outputs.registry }}"
+          echo "ECR registry: $ECR_REGISTRY"
 
           # DockerHub latest tag
           docker tag "$DOCKERHUB_IMAGE" "$IMAGE_NAME:latest"
           docker push "$IMAGE_NAME:latest"
 
           # ECR latest tag
-          docker tag "$ECR_IMAGE" "${{ steps.login-ecr.outputs.registry }}/$IMAGE_NAME:latest"
-          docker push "${{ steps.login-ecr.outputs.registry }}/$IMAGE_NAME:latest"
+          docker tag "$ECR_IMAGE" "$ECR_REGISTRY/$IMAGE_NAME:latest"
+          docker push "$ECR_REGISTRY/$IMAGE_NAME:latest"
