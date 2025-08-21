@@ -39,7 +39,7 @@ jobs:
         with:
           args: >
             -Dsonar.projectKey=techtest
-            -Dsonar.projectName="Techtest"
+            -Dsonar.projectName="My Node Hello App"
             -Dsonar.host.url=${{ secrets.SONAR_HOST_URL }}
             -Dsonar.login=${{ secrets.SONAR_TOKEN }}
 
