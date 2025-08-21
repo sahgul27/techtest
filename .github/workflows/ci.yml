@@ -13,6 +13,10 @@ jobs:
       AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
       AWS_REGION: ${{ secrets.AWS_REGION }}
       IMAGE_NAME: ${{ secrets.IMAGE_NAME }}
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+      DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+      SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
 
     steps:
       # 1. Checkout repo
@@ -32,30 +36,21 @@ jobs:
       # 4. Run SonarQube scan
       - name: SonarQube Scan
         uses: SonarSource/sonarqube-scan-action@v2
-        env:
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
         with:
           args: >
             -Dsonar.projectKey=techtest
-            -Dsonar.projectName="My Node Hello App"
+            -Dsonar.projectName="Techtest"
             -Dsonar.host.url=${{ secrets.SONAR_HOST_URL }}
             -Dsonar.login=${{ secrets.SONAR_TOKEN }}
 
-      # 5. Log in to Docker Hub
+      # 5. DockerHub Login
       - name: DockerHub Login
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      # 6. Build and push image to Docker Hub
-      - name: Build and push Docker image
-        run: |
-          docker build -t $IMAGE_NAME:latest .
-          docker push $IMAGE_NAME:latest
-
-      # (Optional) 7. Push to AWS ECR
+      # 6. Configure AWS Credentials for ECR
       - name: Configure AWS Credentials
         if: ${{ env.AWS_ACCESS_KEY_ID != '' }}
         uses: aws-actions/configure-aws-credentials@v4
@@ -64,14 +59,39 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ secrets.AWS_REGION }}
 
+      # 7. Login to Amazon ECR
       - name: Login to Amazon ECR
         if: ${{ env.AWS_ACCESS_KEY_ID != '' }}
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Build, tag, and push to ECR
-        if: ${{ env.AWS_ACCESS_KEY_ID != '' }}
+      # 8. Build, tag, and push Docker images
+      - name: Build and push Docker images
         run: |
-          ECR_IMAGE="${{ steps.login-ecr.outputs.registry }}/$IMAGE_NAME"
-          docker build -t $ECR_IMAGE:latest .
-          docker push $ECR_IMAGE:latest
+          TAG=${GITHUB_SHA::7}
+
+          # Docker Hub image
+          DOCKERHUB_IMAGE="$IMAGE_NAME:$TAG"
+
+          # AWS ECR image
+          ECR_IMAGE="${{ steps.login-ecr.outputs.registry }}/$IMAGE_NAME:$TAG"
+
+          # Create ECR repo if it doesn't exist
+          aws ecr describe-repositories --repository-names "$IMAGE_NAME" || \
+          aws ecr create-repository --repository-name "$IMAGE_NAME"
+
+          # Build image once with multiple tags
+          docker build -t $DOCKERHUB_IMAGE -t $ECR_IMAGE .
+
+          # Push images
+          docker push $DOCKERHUB_IMAGE
+          docker push $ECR_IMAGE
+
+      # 9. Optional: push latest tag
+      - name: Tag as latest
+        run: |
+          docker tag $DOCKERHUB_IMAGE $IMAGE_NAME:latest
+          docker push $IMAGE_NAME:latest
+
+          docker tag $ECR_IMAGE "${{ steps.login-ecr.outputs.registry }}/$IMAGE_NAME:latest"
+          docker push "${{ steps.login-ecr.outputs.registry }}/$IMAGE_NAME:latest"
